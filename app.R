@@ -80,9 +80,10 @@ ui <- dashboardPage(
                              where they learn about local challenges and while developing and 
                              applying their policy and data science skills in the service of 
                              our community partners."), width=4),
-      tabBox(
-        tabPanel("Compare", textOutput("comptitle"),
-        plotlyOutput("compare"), width=8))
+      tabBox(width = 8,
+        tabPanel("Distribution",textOutput("histtitle"), plotlyOutput("hist"), width=8), 
+        tabPanel("Compare", textOutput("comptitle"), plotlyOutput("compare"), width=8))
+    
     ) # fluid row
   ) # dashboard body
 ) # dashboard page
@@ -106,6 +107,7 @@ server <- function(input, output) {
   output$indicator <- renderUI({
     arb <- input$category
     available <- pretty[pretty$group %in% arb, "goodname"]
+    names(available) <- "Indicator 1"
     selectInput(
       inputId = "indicator", 
       label = "Primary Indicator:",
@@ -118,10 +120,11 @@ server <- function(input, output) {
   output$indicator2 <- renderUI({
     arb <- input$category
     available <- pretty[pretty$group %in% arb, "goodname"]
+    names(available) <- "Indicator 2"
     selectInput(
       inputId = "indicator2",
       label = "Secondary Indicator:",
-      choices = c(unique(available), "None"),
+      choices = c("None", unique(available)),
       selected = "None",
       multiple = F)
   })
@@ -166,13 +169,25 @@ server <- function(input, output) {
   comp.title <- reactive({
     req(input$indicator2)
     if (input$indicator2=="None") {
-      paste(input$indicator)
+      paste("You have not selected a second indicator. To compare, select a second indicator from the control panel.")
     }
     else {paste(input$indicator, " vs. ", input$indicator2)}
   })
   
   # comparison title
   output$comptitle <- renderText({comp.title()})
+  
+  hist.title <- reactive({
+    req(input$indicator2)
+    if (input$indicator2=="None") {
+      paste("Histogram of", input$indicator, "by Census Tract")
+    }
+    else {
+      paste("Histograms of", input$indicator, " and ", input$indicator2, "by Census Tract")}
+  })
+  
+  # comparison title
+  output$histtitle <- renderText({hist.title()})
   
   
   # .....................................................................................
@@ -228,6 +243,25 @@ server <- function(input, output) {
               colors = "Set3") %>% 
         layout(xaxis=list(title=input$indicator),
                yaxis=list(title=input$indicator2))
+    }
+  })
+  
+  
+  output$hist <- renderPlotly({ # add regression line to this
+    req(input$indicator2)
+    if (!input$indicator2=="None") {
+    p1 <- plot_ly(data=tract_data_geo@data,
+            x=tract_data_geo@data[tract_data_geo$county.nice %in% input$geo,
+                                  paste(pretty[pretty$goodname==input$indicator, "varname"])],
+            type="histogram") %>%
+      layout(xaxis=list(title=input$indicator))
+    p2 <- plot_ly(data=tract_data_geo@data,
+            x=tract_data_geo@data[tract_data_geo$county.nice %in% input$geo,
+                                  paste(pretty[pretty$goodname==input$indicator2, "varname"])],
+            type="histogram") %>%
+      layout(xaxis=list(title=input$indicator2))
+    subplot(p1, p2, titleX = T, titleY = T) %>%
+      layout(showlegend = FALSE)
     }
     else {
       plot_ly(data=tract_data_geo@data,
