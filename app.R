@@ -29,58 +29,74 @@ pretty <- data.frame(pretty)
 
 # create ui
 ui <- dashboardPage(
-  dashboardHeader(),
-  dashboardSidebar(collapsed = TRUE),
+  dashboardHeader(disable = TRUE),
+  dashboardSidebar(collapsed = TRUE, 
+                   sidebarMenu(
+                     menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+                     menuItem("Widgets", tabName = "widgets", icon = icon("th"))
+                   )),
   dashboardBody(
-    fluidRow(
-      box(tags$h3("Equity Indicators Maps"),
-          tags$p("A short description of the project here, with things like 
-                   why this exists, and how you might use it."),
-          tags$br(),
-          tags$p("Select an equity indicator:"),
-          htmlOutput("category"),
-          htmlOutput("indicator"),
-          htmlOutput("indicator2"),
-          selectInput(
-            inputId = "geo", 
-            label = "Counties",
-            choices = levels(factor(tract_data_geo@data$county.nice)), 
-            selected = levels(factor(tract_data_geo@data$county.nice)), 
-            multiple = T),
-          htmlOutput("time"),
-          tags$a(href = "http://commpas-lab.mystrikingly.com", 
-                 tags$img(height = 90, src = "three-line-bw.png")), width=4), 
-      tabBox(tabPanel("Map of Indicator 1", 
-                      textOutput("maptitle"),
-                      leafletOutput("map", height=600),
-                      textOutput("source")),
-             tabPanel("Map Compare"),
-          width=8)), # fluid row
-    fluidRow(
-      box(textOutput("ind1_name"), 
-          textOutput("ind1_abt"), tags$br(),
-          textOutput("ind2_name"), 
-          textOutput("ind2_abt"),
-          width=4),
-      tabBox(width = 8,
-        tabPanel("Distribution",textOutput("histtitle"), plotlyOutput("hist"), width=8), 
-        tabPanel("Compare", textOutput("comptitle"), plotlyOutput("compare"), width=8), 
-        tabPanel("By Race")
-        )
-    
-    ), # fluid row
-    fluidRow(
-      box(tags$h3("Community Policy, Analytics, and Strategy Lab"),
-          tags$p("The Community Politics, Analytics and Strategy Lab (CommPAS) 
-                             sponsors the community-oriented work and collaboration between 
-                             the Batten School of Leadership and Public Policy and the UVA 
-                             Library's StatLab. Through courses and research projects, the 
-                             CommPAS Lab works in partnership with local agencies, nonprofits, 
-                             and citizen groups to produce actionable research and resources. 
-                             The CommPAS Lab brings students into community-engaged research 
-                             where they learn about local challenges and while developing and 
-                             applying their policy and data science skills in the service of 
-                             our community partners."), width=8))
+    tabItems(
+     tabItem(tabName = "dashboard",
+      fluidRow(
+        box(tags$h3("Equity Indicators Maps"),
+            tags$p("A short description of the project here, with things like 
+                     why this exists, and how you might use it."),
+            tags$br(),
+            tags$p("Select an equity indicator:"),
+            htmlOutput("category"),
+            htmlOutput("indicator"),
+            htmlOutput("indicator2"),
+            selectInput(
+              inputId = "geo", 
+              label = "Counties",
+              choices = levels(factor(tract_data_geo@data$county.nice)), 
+              selected = levels(factor(tract_data_geo@data$county.nice)), 
+              multiple = T),
+            htmlOutput("time"),
+            # tags$a(href = "http://commpas-lab.mystrikingly.com", 
+            #        tags$img(height = 90, src = "three-line-bw.png")), 
+            width=4), 
+        tabBox(tabPanel("Map of Indicator 1", 
+                        textOutput("maptitle"),
+                        leafletOutput("map", height=600),
+                        textOutput("source")),
+               tabPanel("Map Compare", 
+                        leafletOutput("map_compare", height=600)),
+            width=8)), # fluid row
+      fluidRow(
+        box(textOutput("ind1_name"), 
+            textOutput("ind1_abt"), tags$br(),
+            textOutput("ind2_name"), 
+            textOutput("ind2_abt"),
+            width=4),
+        tabBox(width = 8,
+          tabPanel("Distribution",textOutput("histtitle"), plotlyOutput("hist"), width=8), 
+          tabPanel("Compare", textOutput("comptitle"), plotlyOutput("compare"), width=8), 
+          tabPanel("By Race")
+          )
+      
+      ), # fluid row
+      fluidRow(
+        box(tags$h3("Community Policy, Analytics, and Strategy Lab"),
+            tags$p("The Community Politics, Analytics and Strategy Lab (CommPAS) 
+                               sponsors the community-oriented work and collaboration between 
+                               the Batten School of Leadership and Public Policy and the UVA 
+                               Library's StatLab. Through courses and research projects, the 
+                               CommPAS Lab works in partnership with local agencies, nonprofits, 
+                               and citizen groups to produce actionable research and resources. 
+                               The CommPAS Lab brings students into community-engaged research 
+                               where they learn about local challenges and while developing and 
+                               applying their policy and data science skills in the service of 
+                               our community partners."), width=8), # box close
+        box(width=4,  
+            tags$a(href = "http://commpas-lab.mystrikingly.com",
+                   tags$img(height = 170, src = "three-line-bw.png")))
+        ) # row close
+      ), # tab item close
+      tabItem(tabName = "widgets", 
+              h2("Story Content here"))
+    ) # tab items
   ) # dashboard body
 ) # dashboard page
 
@@ -155,14 +171,6 @@ server <- function(input, output) {
     df[,col]
   })
   
-  d2 <- reactive({
-    req(input$indicator2)
-    df <- filter(tract_data_geo@data, county.nice %in% input$geo & 
-                   year %in% input$time)
-    col <- paste(pretty[pretty$goodname==input$indicator2, "varname"])
-    df[,col]
-  })
-  
   # create palette function
   pal <- reactive({
     req(input$indicator)
@@ -170,8 +178,25 @@ server <- function(input, output) {
                    year %in% input$time)
     col <- paste(pretty[pretty$goodname==input$indicator, "varname"])
     colorNumeric(palette = mycolors,
-                 domain = df[,col])
+                 domain = df[,col]) })
+  
+  # create data set for second indicator
+  d2 <- reactive({
+    df <- filter(tract_data_geo@data, county.nice %in% input$geo & 
+                   year %in% input$time)
+    col <- paste(pretty[pretty$goodname==input$indicator2, "varname"])
+    df[,col]
+  })
+  
     
+    # create palette function
+  pal2 <- reactive({
+    req(input$indicator2)
+      df <- filter(tract_data_geo@data, county.nice %in% input$geo & 
+                     year %in% input$time)
+      col2 <- paste(pretty[pretty$goodname==input$indicator2, "varname"])
+      colorNumeric(palette = mycolors,
+                   domain = df[,col2])
   })
   
   # .....................................................................................
@@ -290,7 +315,7 @@ server <- function(input, output) {
     leaflet() %>%
       addProviderTiles("CartoDB.Positron") %>% 
       addPolygons(data = subset(tract_data_geo, county.nice %in% input$geo & year %in% input$time),
-                  fillColor = ~pal()(d2()),
+                  fillColor = ~pal2()(d2()),
                   fillOpacity = 0.5,
                   color = "white",
                   weight = 2,
@@ -317,11 +342,11 @@ server <- function(input, output) {
       ) %>% 
       hideGroup("Parks") %>% 
       hideGroup("Schools") %>% 
-      addLegend(pal = pal(),
+      addLegend(pal = pal2(),
                 values = as.numeric(d2()),
                 position = "topright",
                 opacity = 0.25,
-                title = input$indicator)  
+                title = input$indicator2)  
   })
   
   
