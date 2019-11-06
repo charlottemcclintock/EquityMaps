@@ -18,6 +18,13 @@ library(shinythemes)
 # Load data
 load("data/app_data.Rdata")
 
+prettytab <- gs_title("prettytable")
+pretty <- gs_read(prettytab, ws = "acs_tract")
+pretty$goodname <- toTitleCase(pretty$description)
+pretty$description <- as.character(pretty$description)
+pretty <- data.frame(pretty)
+
+
 # .....................................................................................
 
 # create ui
@@ -34,28 +41,32 @@ ui <- dashboardPage(
           htmlOutput("category"),
           htmlOutput("indicator"),
           htmlOutput("indicator2"),
-          htmlOutput("time"),
           selectInput(
             inputId = "geo", 
             label = "Counties",
             choices = levels(factor(tract_data_geo@data$county.nice)), 
             selected = levels(factor(tract_data_geo@data$county.nice)), 
             multiple = T),
+          htmlOutput("time"),
           tags$a(href = "http://commpas-lab.mystrikingly.com", 
                  tags$img(height = 90, src = "three-line-bw.png")), width=4), 
-      box(textOutput("maptitle"),
-          leafletOutput("map", height=600),
-          textOutput("source"),
+      tabBox(tabPanel("Map of Indicator 1", 
+                      textOutput("maptitle"),
+                      leafletOutput("map", height=600),
+                      textOutput("source")),
+             tabPanel("Map Compare"),
           width=8)), # fluid row
     fluidRow(
       box(textOutput("ind1_name"), 
-          # textOutput("ind1_abt"), 
+          textOutput("ind1_abt"), tags$br(),
           textOutput("ind2_name"), 
-          # textOutput("ind2_abt"),
+          textOutput("ind2_abt"),
           width=4),
       tabBox(width = 8,
         tabPanel("Distribution",textOutput("histtitle"), plotlyOutput("hist"), width=8), 
-        tabPanel("Compare", textOutput("comptitle"), plotlyOutput("compare"), width=8))
+        tabPanel("Compare", textOutput("comptitle"), plotlyOutput("compare"), width=8), 
+        tabPanel("By Race")
+        )
     
     ), # fluid row
     fluidRow(
@@ -69,7 +80,7 @@ ui <- dashboardPage(
                              The CommPAS Lab brings students into community-engaged research 
                              where they learn about local challenges and while developing and 
                              applying their policy and data science skills in the service of 
-                             our community partners."), width=4))
+                             our community partners."), width=8))
   ) # dashboard body
 ) # dashboard page
 
@@ -128,7 +139,7 @@ server <- function(input, output) {
                     label = "",
                     choices = years_avail(),
                     selected = years_avail()[1],
-                    animate=T,
+                    animate=F,
                     grid=T )})
   
   
@@ -141,6 +152,14 @@ server <- function(input, output) {
     df <- filter(tract_data_geo@data, county.nice %in% input$geo & 
                    year %in% input$time)
     col <- paste(pretty[pretty$goodname==input$indicator, "varname"])
+    df[,col]
+  })
+  
+  d2 <- reactive({
+    req(input$indicator2)
+    df <- filter(tract_data_geo@data, county.nice %in% input$geo & 
+                   year %in% input$time)
+    col <- paste(pretty[pretty$goodname==input$indicator2, "varname"])
     df[,col]
   })
   
@@ -170,31 +189,33 @@ server <- function(input, output) {
     req(input$indicator)
     paste(input$indicator)
   })
+  
   # output indicator 1 description
-  # output$ind1_abt <- renderText({
-  #   req(input$indicator)
-  #   arb <- pretty[pretty$goodname=="Estimated Population", "about"]
-  #   paste(arb)
-  # })
+  output$ind1_abt <- renderText({
+    paste(pretty[pretty$goodname=="Estimated Population", "about"]) 
+  })
+  
   
   # output indicator 2 name
   output$ind2_name <- renderText({
     req(input$indicator2)
     if (input$indicator2=="None") {
-      return("")}
+      paste("")
+      }
+    else {
+    paste(input$indicator2)
+    }
+  })
+  
+  # output indicator 2 description
+  output$ind2_abt <- renderText({
+    if (input$indicator2=="None") {
+      paste("")
+    }
     else {
     req(input$indicator2)
-    paste(input$indicator2)}
+    paste(pretty[pretty$goodname==input$indicator, "about"]) }
   })
-  # output indicator 2 description
-  # output$ind2_abt <- renderText({
-  #   if (input$indicator2=="None") {
-  #     return("")
-  #   }
-  #   else {
-  #   req(input$indicator2)
-  #   paste(pretty[pretty$goodname==input$indicator, "about"]) }
-  # })
 
   # map title
   output$maptitle <- renderText({input$indicator})
@@ -265,24 +286,44 @@ server <- function(input, output) {
                 title = input$indicator)  
   })
   
-  # outline <- quakes[chull(quakes$long, quakes$lat),]
-  # 
-  # map <- leaflet(quakes) %>%
-  #   # Base groups
-  #   addTiles(group = "OSM (default)") %>%
-  #   addProviderTiles(providers$Stamen.Toner, group = "Toner") %>%
-  #   addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
-  #   # Overlay groups
-  #   addCircles(~long, ~lat, ~10^mag/5, stroke = F, group = "Quakes") %>%
-  #   addPolygons(data = outline, lng = ~long, lat = ~lat,
-  #               fill = F, weight = 2, color = "#FFFFCC", group = "Outline") %>%
-  #   # Layers control
-  #   addLayersControl(
-  #     baseGroups = c("OSM (default)", "Toner", "Toner Lite"),
-  #     overlayGroups = c("Quakes", "Outline"),
-  #     options = layersControlOptions(collapsed = FALSE)
-  #   )
-  # map
+  output$map_compare <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles("CartoDB.Positron") %>% 
+      addPolygons(data = subset(tract_data_geo, county.nice %in% input$geo & year %in% input$time),
+                  fillColor = ~pal()(d2()),
+                  fillOpacity = 0.5,
+                  color = "white",
+                  weight = 2,
+                  smoothFactor = 0.2,
+                  popup = paste0(input$indicator2, ": ",d2(),  "<br>",
+                                 tract_data_geo$NAME.y[tract_data_geo$county.nice %in% input$geo & tract_data_geo$year %in% input$time], "<br>"
+                  ),
+                  highlight = highlightOptions(
+                    weight = 5,
+                    fillOpacity = 0.7,
+                    bringToFront = F)) %>% 
+      addPolygons(data = subset(counties_geo, NAMELSAD %in% input$geo),
+                  color = "grey",
+                  fill = FALSE,
+                  weight = 3) %>% 
+      addPolygons(data =  parks_sf, group="Parks", 
+                  popup = paste(parks_sf$NAME)) %>% 
+      addCircles(data =  schools_sf, group="Schools", 
+                 popup = paste(schools_sf$NAME)) %>% 
+      addLayersControl(
+        overlayGroups = c("Parks", "Schools"),
+        options = layersControlOptions(collapsed = FALSE), 
+        position = "bottomright"
+      ) %>% 
+      hideGroup("Parks") %>% 
+      hideGroup("Schools") %>% 
+      addLegend(pal = pal(),
+                values = as.numeric(d2()),
+                position = "topright",
+                opacity = 0.25,
+                title = input$indicator)  
+  })
+  
   
   # build comparison plot
   output$compare <- renderPlotly({ # add regression line to this
@@ -297,7 +338,14 @@ server <- function(input, output) {
                                         "county.nice"],
               type = "scatter", mode = "markers", 
               # Set3 has 12 values, which matches the 12 cities/counties
-              colors = "Set3") %>% 
+              colors = "Set3", 
+              text=paste0(tract_data_geo@data[tract_data_geo$county.nice %in% input$geo,"county.nice"], "<br>",
+                          input$indicator, ": ", tract_data_geo@data[tract_data_geo$county.nice %in% input$geo,
+                                                                     paste(pretty[pretty$goodname==input$indicator, "varname"])], "<br>",
+                         input$indicator2, ": ", tract_data_geo@data[tract_data_geo$county.nice %in% input$geo,
+                                                                     paste(pretty[pretty$goodname==input$indicator2, "varname"])]
+                         ), 
+              hoverinfo='text') %>% 
         layout(xaxis=list(title=input$indicator),
                yaxis=list(title=input$indicator2))
     }

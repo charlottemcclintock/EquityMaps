@@ -78,6 +78,8 @@ county_data <- county_data %>%
 prettytab <- gs_title("prettytable")
 pretty <- gs_read(prettytab, ws = "acs_tract")
 pretty$goodname <- toTitleCase(pretty$description)
+pretty$description <- as.character(pretty$description)
+pretty <- data.frame(pretty)
 
 # prettytab <- gs_title("prettytable")
 pretty2 <- gs_read(prettytab, ws = "acs_county")
